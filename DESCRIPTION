@@ -2,8 +2,8 @@ Package: who-validation
 Title: Generates Dummy Data Using The WHO Anthro and Anthroplus Packages
 Version: 0.0.0.1
 Authors@R: 
-    person("Simon", "Chapman", , "simon@eatyourpeas.co.uk", role = c("aut", "cre"))
-Description: Creates fictional children with different growth values for validating growth calculations
+    person("Simon", "Chapman", email = "simon@eatyourpeas.co.uk", role = c("aut", "cre"))
+Description: Creates fictional children with different growth values for validating growth calculations using the WHO Children's Growth Standards (0-5 years) and WHO Growth Reference (5-19 years) as implemented in the (RCPCH-forked) anthro and anthroplus packages.
 License: `use_mit_license()`
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
