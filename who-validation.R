@@ -114,8 +114,13 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
 #' @param na_string String to use for NA values in CSV (default empty string)
 #' @param compress If TRUE write a gzipped CSV (appends .gz if not present)
 #' @return Invisibly returns the path written
-save_measurements_csv <- function(df, file_path = "measurements.csv", na_string = "", compress = FALSE) {
+save_measurements_csv <- function(df, file_path = file.path("created-csvs", "measurements.csv"), na_string = "", compress = FALSE) {
   stopifnot(is.data.frame(df))
+
+  # ensure output directory exists
+  out_dir <- dirname(file_path)
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
   if (compress) {
     if (!grepl("\\.gz$", file_path)) file_path <- paste0(file_path, ".gz")
     con <- gzfile(file_path, "w")

@@ -36,7 +36,7 @@ The file `who-validation.R` exposes three helpers:
     - `measurement_method = "bmi"` -> `bmi`
     - `measurement_method = "headc"` -> `headc`
 
-- `save_measurements_csv(df, file_path = "measurements.csv", na_string = "", compress = FALSE)`
+`save_measurements_csv(df, file_path = "data-files/random_dates_with_measurements.csv", na_string = "", compress = FALSE)`
   - Writes the dataframe produced by `compute_measurements()` to CSV. If
     `compress = TRUE` the file is written gzipped and `file_path` will have
     `.gz` appended if not present.
@@ -50,13 +50,13 @@ calling `ensure_latest_packages(TRUE)`):
 # install or update packages if needed (uncomment to force reinstall)
 # ensure_latest_packages(TRUE)
 
+# show examples
+head(result[c("start_date", "age_days", "age_months", "height_in_cm")])
+
 # load and prepare the random dates dataset
 df <- load_random_dates()
 
 # compute heights corresponding to z = 2.5
-result <- compute_measurements(df, measurement_method = "length", requested_z = 2.5)
-
-# show examples
 head(result[c("start_date", "age_days", "age_months", "height_in_cm")])
 ```
 
