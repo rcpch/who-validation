@@ -103,6 +103,7 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
   }
 
   df[[out_col]] <- height_in_cm
+  df[['requested_z']] <- requested_z
   df
 }
 
@@ -130,6 +131,92 @@ save_measurements_csv <- function(df, file_path = file.path("created-csvs", "mea
     write.csv(df, file_path, row.names = FALSE, na = na_string)
   }
   invisible(file_path)
+}
+
+
+##' Compute randomised measurements per-row
+##'
+#' For each row in `df`, randomly select a `measurement_method` and `sex` from
+#' the provided sets and compute the requested z-score measurement. Returns the
+#' input dataframe augmented with:
+#' - `measurement_value`: numeric computed measurement
+#' - `measurement_method`: method used for that row
+#' - `sex_used`: sex value used for that row
+#'
+compute_random_measurements <- function(df,
+                                        methods = c("length", "weight", "bmi", "headc"),
+                                        sexes = NULL,
+                                        requested_z = 2.5,
+                                        measurement_precision = 2,
+                                        correct_extreme = TRUE,
+                                        seed = NULL) {
+  stopifnot(is.data.frame(df))
+  if (!"age_months" %in% names(df)) stop("Dataframe must contain 'age_months' computed by load_random_dates()")
+
+  n <- nrow(df)
+  if (is.null(sexes)) {
+    if ("sex" %in% names(df)) sexes <- unique(na.omit(df$sex)) else sexes <- c(1L,2L)
+  }
+
+  # validate methods
+  allowed_methods <- c("length","weight","bmi","headc")
+  if (!all(methods %in% allowed_methods)) stop("methods must be a subset of: ", paste(allowed_methods, collapse=", "))
+
+  if (!is.null(seed)) set.seed(seed)
+
+  sampled_methods <- sample(methods, n, replace = TRUE)
+  sampled_sexes <- sample(sexes, n, replace = TRUE)
+
+  measurement_value <- rep(NA_real_, n)
+
+  for (i in seq_len(n)) {
+    one_row <- df[i, , drop = FALSE]
+    method_i <- sampled_methods[i]
+    sex_i <- sampled_sexes[i]
+    # compute single-row measurement
+    res <- tryCatch({
+      compute_measurements(one_row,
+                           measurement_method = method_i,
+                           sex = sex_i,
+                           requested_z = requested_z,
+                           measurement_precision = measurement_precision,
+                           correct_extreme = correct_extreme)
+    }, error = function(e) {
+      warning("compute_measurements failed for row ", i, ": ", conditionMessage(e))
+      NULL
+    })
+
+    if (is.data.frame(res) && nrow(res) >= 1) {
+      # prefer the method-specific column name, fallback to first numeric
+      out_name <- switch(method_i,
+                         length = "height_in_cm",
+                         weight = "weight_kg",
+                         bmi = "bmi",
+                         headc = "headc",
+                         NULL)
+      if (!is.null(out_name) && out_name %in% names(res)) {
+        measurement_value[i] <- as.numeric(res[[out_name]])[1]
+      } else {
+        num_cols <- vapply(res, is.numeric, FALSE)
+        if (any(num_cols)) {
+          measurement_value[i] <- as.numeric(res[[ which(num_cols)[1] ]])[1]
+        } else {
+          measurement_value[i] <- NA_real_
+        }
+      }
+    } else {
+      measurement_value[i] <- NA_real_
+    }
+  }
+
+  df$measurement_value <- measurement_value
+  df$measurement_method <- sampled_methods
+  df$sex_used <- sampled_sexes
+  df$requested_z <- rep_len(requested_z, n)
+  df$measurement_precision <- rep_len(as.integer(measurement_precision), n)
+  df$correct_extreme <- rep_len(as.logical(correct_extreme), n)
+
+  df
 }
 
 
