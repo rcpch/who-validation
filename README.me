@@ -1,0 +1,11 @@
+# WHO Validation
+
+Using the RCPCH fork of the WHO packages
+- anthro (< 5 y)
+- anthroplus (>5 y)
+Note that these packages have been amended by RCPCH to support this package:
+1. a new `z_precision` flag is introduced to allow z scores to be reported to more than 2 dp which is the base behaviour of anthro and anthroplus. These are the subjects of open PRs to the WHO repos made by RCPCH
+2. a new `anthro_measurements` function that returns measurements against z scores, with an optional `correct_extreme` flag that defaults to false and corrects SD outside +/-3 SD in the WHO published way
+
+Generates fictional child values for different SDS values
+
