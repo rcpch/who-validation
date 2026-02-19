@@ -53,8 +53,18 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
 
   height_in_cm <- rep(NA_real_, nrow(df))
 
-  # anthroplus for age >= 61 months (expects months)
-  idx_plus <- which(df$age_months >= 61)
+  # determine allowed rows for the requested measurement based on age
+  # head circumference only for < 61 months, weight only for <= 120 months
+  if (measurement_method %in% c("headc", "headcirc")) {
+    allowed_rows <- which(df$age_months < 61)
+  } else if (measurement_method %in% c("weight", "wei")) {
+    allowed_rows <- which(!is.na(df$age_months) & df$age_months <= 120)
+  } else {
+    allowed_rows <- seq_len(nrow(df))
+  }
+
+  # anthroplus for age >= 61 months (expects months) and allowed by method
+  idx_plus <- intersect(which(df$age_months >= 61), allowed_rows)
   if (length(idx_plus) > 0) {
     nplus <- length(idx_plus)
     res_plus <- tryCatch({
@@ -78,8 +88,8 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
     }
   }
 
-  # anthro for age < 61 months (expects age in days)
-  idx_anthro <- which(df$age_months < 61)
+  # anthro for age < 61 months (expects age in days) and allowed by method
+  idx_anthro <- intersect(which(df$age_months < 61), allowed_rows)
   if (length(idx_anthro) > 0) {
     nanth <- length(idx_anthro)
     res_anthro <- tryCatch({
@@ -139,9 +149,9 @@ save_measurements_csv <- function(df, file_path = file.path("created-csvs", "mea
 #' For each row in `df`, randomly select a `measurement_method` and `sex` from
 #' the provided sets and compute the requested z-score measurement. Returns the
 #' input dataframe augmented with:
-#' - `measurement_value`: numeric computed measurement
+#' - `observation_value`: numeric computed measurement
 #' - `measurement_method`: method used for that row
-#' - `sex_used`: sex value used for that row
+#' - `sex`: sex value used for that row
 #'
 compute_random_measurements <- function(df,
                                         methods = c("length", "weight", "bmi", "headc"),
@@ -164,10 +174,29 @@ compute_random_measurements <- function(df,
 
   if (!is.null(seed)) set.seed(seed)
 
-  sampled_methods <- sample(methods, n, replace = TRUE)
+  sampled_methods <- character(n)
   sampled_sexes <- sample(sexes, n, replace = TRUE)
 
-  measurement_value <- rep(NA_real_, n)
+  # choose a method per row from those allowed by age
+  for (i in seq_len(n)) {
+    age_i <- df$age_months[i]
+    if (is.na(age_i)) {
+      allowed_by_age <- methods
+    } else if (age_i < 61) {
+      allowed_by_age <- intersect(methods, c("length", "weight", "bmi", "headc"))
+    } else if (age_i <= 120) {
+      allowed_by_age <- intersect(methods, c("length", "weight", "bmi"))
+    } else {
+      allowed_by_age <- intersect(methods, c("length", "bmi"))
+    }
+    if (length(allowed_by_age) == 0) {
+      sampled_methods[i] <- NA_character_
+    } else {
+      sampled_methods[i] <- sample(allowed_by_age, 1)
+    }
+  }
+
+  observation_value <- rep(NA_real_, n)
 
   for (i in seq_len(n)) {
     one_row <- df[i, , drop = FALSE]
@@ -194,24 +223,24 @@ compute_random_measurements <- function(df,
                          bmi = "bmi",
                          headc = "headc",
                          NULL)
-      if (!is.null(out_name) && out_name %in% names(res)) {
-        measurement_value[i] <- as.numeric(res[[out_name]])[1]
+        if (!is.null(out_name) && out_name %in% names(res)) {
+        observation_value[i] <- as.numeric(res[[out_name]])[1]
       } else {
         num_cols <- vapply(res, is.numeric, FALSE)
         if (any(num_cols)) {
-          measurement_value[i] <- as.numeric(res[[ which(num_cols)[1] ]])[1]
+          observation_value[i] <- as.numeric(res[[ which(num_cols)[1] ]])[1]
         } else {
-          measurement_value[i] <- NA_real_
+          observation_value[i] <- NA_real_
         }
       }
     } else {
-      measurement_value[i] <- NA_real_
+      observation_value[i] <- NA_real_
     }
   }
 
-  df$measurement_value <- measurement_value
+  df$observation_value <- observation_value
   df$measurement_method <- sampled_methods
-  df$sex_used <- sampled_sexes
+  df$sex <- sampled_sexes
   df$requested_z <- rep_len(requested_z, n)
   df$measurement_precision <- rep_len(as.integer(measurement_precision), n)
   df$correct_extreme <- rep_len(as.logical(correct_extreme), n)
