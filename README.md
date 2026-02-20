@@ -71,9 +71,7 @@ head(result[c("start_date", "age_days", "age_months", "height_in_cm")])
 
 ## A few extra things - When does WHO 2006 swap to 2007?
 
-- Back in August 2025 the WHO removed all LMS values from the tables > 1826y (5y) [this commit](https://github.com/WorldHealthOrganization/anthro/commit/8b30b3581e93bc4efaab0ef3deaf40c1d993ea88). This now leaves a gap between the endo of anthro and the start of anthroplus (which is in months and starts at 61 mths). @statist7 helpfully remembers that WHO deliberately tried to run the 2006 standard and 2007 reference close together (in [this paper](Development of a WHO growth reference for school-aged
-children and adolescents
-Mercedes de Onis,a Adelheid W Onyango,a Elaine Borghi,a Amani Siyam,a Chizuru Nishidaa & Jonathan Siekmanna)) so although there are discrepancies between the two (see [this issue](https://github.com/WorldHealthOrganization/anthro/issues/64)), they are only small and it would be reasonable to interpolate between the end of 2006 and the start of 2007
+- Back in August 2025 the WHO removed all LMS values from the tables > 1826d (5y) [this commit](https://github.com/WorldHealthOrganization/anthro/commit/8b30b3581e93bc4efaab0ef3deaf40c1d993ea88). This now leaves a gap between the end of anthro and the start of anthroplus (which is in months and starts at 61 mths). @statist7 helpfully remembers that WHO deliberately tried to run the 2006 standard and 2007 reference close together (in [this paper](https://pubmed.ncbi.nlm.nih.gov/18026621/)) so although there are discrepancies between the two (see [this issue](https://github.com/WorldHealthOrganization/anthro/issues/64)), they are only small and it would be reasonable to interpolate between the end of 2006 and the start of 2007
 
 In fact though I have found it easier simply to dig back in the Anthro history and replace the LMS values removed in that commit and run straight up to (but not including) 61 months in anthro, and step into anthroplus from 61 months onwards.
 
