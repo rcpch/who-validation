@@ -23,15 +23,16 @@ load_random_dates <- function(rd_path = file.path("data-files", "random_dates.cs
   df <- read.csv(rd_path, stringsAsFactors = FALSE)
   if (ncol(df) < 3) stop("data-files/random_dates.csv must contain at least three columns: start_date, end_date, age_days")
   names(df)[1:3] <- c("start_date", "end_date", "age_days")
-  ## compute age in months from days using 30.4375 and round to integer
-  df$age_months <- as.integer(round(df$age_days / 30.4375))
+  ## compute age in months from days using 30.4375
+  ## keep decimal months (do NOT round) so anthroplus can interpolate between months
+  df$age_months <- df$age_days / 30.4375
   df$age_years <- df$age_days / 365.25
   df
 }
 
 ## compute measurements given a prepared dataframe from `load_random_dates()`
 ## measurement_method: one of "length","weight","bmi","headc"
-compute_measurements <- function(df, measurement_method = "length", sex = NULL, requested_z = 2.5, measurement_precision = 2, correct_extreme = TRUE) {
+compute_measurements <- function(df, measurement_method = "length", sex = NULL, requested_z = 2.5, measurement_precision = 4, correct_extreme = TRUE) {
   stopifnot(is.data.frame(df))
   if (!"age_months" %in% names(df)) stop("Dataframe must contain 'age_months' computed by load_random_dates()")
 
@@ -52,6 +53,8 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
                     stop("Unsupported measurement_method"))
 
   height_in_cm <- rep(NA_real_, nrow(df))
+  # raw (high-precision) values to allow exact SDS re-computation
+  height_in_cm_raw <- rep(NA_real_, nrow(df))
 
   # determine allowed rows for the requested measurement based on age
   # head circumference only for < 61 months, weight only for <= 120 months
@@ -63,20 +66,20 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
     allowed_rows <- seq_len(nrow(df))
   }
 
-  # anthroplus for age >= 61 months (expects months) and allowed by method
+  # anthroplus for age >= 61 months (expects decimal months and will interpolate between monthly LMS)
   idx_plus <- intersect(which(df$age_months >= 61), allowed_rows)
   if (length(idx_plus) > 0) {
     nplus <- length(idx_plus)
     res_plus <- tryCatch({
       fn <- get("anthroplus_measurements", envir = asNamespace("anthroplus"))
-      fn(
-        sex = sex_vec[idx_plus],
-        age_in_months = df$age_months[idx_plus],
-        requested_z = requested_z,
-        measurement_method = measurement_method,
-        measurement_precision = measurement_precision,
-        correct_extreme = correct_extreme
-      )
+        fn(
+          sex = sex_vec[idx_plus],
+          age_in_months = df$age_months[idx_plus], # decimal months - anthroplus will interpolate
+          requested_z = requested_z,
+          measurement_method = measurement_method,
+          measurement_precision = measurement_precision,
+          correct_extreme = correct_extreme
+        )
     }, error = function(e) {
       warning("anthroplus_measurements unavailable: ", conditionMessage(e))
       # create NA data.frame with appropriate column name
@@ -84,7 +87,25 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
     })
     # pick the first numeric column returned
     if (is.data.frame(res_plus) && ncol(res_plus) >= 1) {
+      # store rounded value
       height_in_cm[idx_plus] <- as.numeric(res_plus[[1]])
+      # also compute and store a high-precision raw value
+      res_plus_raw <- tryCatch({
+        fn(
+          sex = sex_vec[idx_plus],
+          age_in_months = df$age_months[idx_plus],
+          requested_z = requested_z,
+          measurement_method = measurement_method,
+          measurement_precision = max(8L, as.integer(measurement_precision) + 4L),
+          correct_extreme = correct_extreme
+        )
+      }, error = function(e) {
+        warning("anthroplus_measurements raw unavailable: ", conditionMessage(e))
+        data.frame(tmp = rep(NA_real_, length(idx_plus)))
+      })
+      if (is.data.frame(res_plus_raw) && ncol(res_plus_raw) >= 1) {
+        height_in_cm_raw[idx_plus] <- as.numeric(res_plus_raw[[1]])
+      }
     }
   }
 
@@ -109,10 +130,30 @@ compute_measurements <- function(df, measurement_method = "length", sex = NULL, 
     })
     if (is.data.frame(res_anthro) && ncol(res_anthro) >= 1) {
       height_in_cm[idx_anthro] <- as.numeric(res_anthro[[1]])
+      # compute high-precision raw values from anthro
+      res_anthro_raw <- tryCatch({
+        fn(
+          sex = sex_vec[idx_anthro],
+          age = df$age_days[idx_anthro],
+          is_age_in_month = FALSE,
+          requested_z = requested_z,
+          measurement_method = measurement_method,
+          measurement_precision = max(8L, as.integer(measurement_precision) + 4L),
+          correct_extreme = correct_extreme
+        )
+      }, error = function(e) {
+        warning("anthro_measurements raw unavailable: ", conditionMessage(e))
+        data.frame(tmp = rep(NA_real_, length(idx_anthro)))
+      })
+      if (is.data.frame(res_anthro_raw) && ncol(res_anthro_raw) >= 1) {
+        height_in_cm_raw[idx_anthro] <- as.numeric(res_anthro_raw[[1]])
+      }
     }
   }
 
   df[[out_col]] <- height_in_cm
+  # expose raw unrounded observation when available
+  df[['observation_value_raw']] <- height_in_cm_raw
   df[['requested_z']] <- requested_z
   df
 }
@@ -157,7 +198,7 @@ compute_random_measurements <- function(df,
                                         methods = c("length", "weight", "bmi", "headc"),
                                         sexes = NULL,
                                         requested_z = 2.5,
-                                        measurement_precision = 2,
+                                        measurement_precision = 4,
                                         correct_extreme = TRUE,
                                         seed = NULL) {
   stopifnot(is.data.frame(df))
@@ -197,6 +238,7 @@ compute_random_measurements <- function(df,
   }
 
   observation_value <- rep(NA_real_, n)
+  observation_value_raw <- rep(NA_real_, n)
 
   for (i in seq_len(n)) {
     one_row <- df[i, , drop = FALSE]
@@ -224,14 +266,19 @@ compute_random_measurements <- function(df,
                          headc = "headc",
                          NULL)
         if (!is.null(out_name) && out_name %in% names(res)) {
-        observation_value[i] <- as.numeric(res[[out_name]])[1]
-      } else {
-        num_cols <- vapply(res, is.numeric, FALSE)
-        if (any(num_cols)) {
-          observation_value[i] <- as.numeric(res[[ which(num_cols)[1] ]])[1]
-        } else {
-          observation_value[i] <- NA_real_
+          observation_value[i] <- as.numeric(res[[out_name]])[1]
         }
+        # capture high-precision raw value if returned by compute_measurements
+        if ("observation_value_raw" %in% names(res)) {
+          observation_value_raw[i] <- as.numeric(res[["observation_value_raw"]])[1]
+      } else {
+          num_cols <- vapply(res, is.numeric, FALSE)
+          if (any(num_cols)) {
+            # if out_name wasn't present, fall back to first numeric column for observation_value
+            if (is.na(observation_value[i])) observation_value[i] <- as.numeric(res[[ which(num_cols)[1] ]])[1]
+          } else {
+            if (is.na(observation_value[i])) observation_value[i] <- NA_real_
+          }
       }
     } else {
       observation_value[i] <- NA_real_
@@ -239,6 +286,8 @@ compute_random_measurements <- function(df,
   }
 
   df$observation_value <- observation_value
+  # expose raw observation values when available
+  df$observation_value_raw <- observation_value_raw
   df$measurement_method <- sampled_methods
   df$sex <- sampled_sexes
   df$requested_z <- rep_len(requested_z, n)
