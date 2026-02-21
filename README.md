@@ -41,6 +41,27 @@ The file `who-validation.R` exposes three helpers:
     `compress = TRUE` the file is written gzipped and `file_path` will have
     `.gz` appended if not present.
 
+- `compute_random_measurements(df = NULL, methods = c("length","weight","bmi","headc"), sexes = NULL, requested_z = 2.5, measurement_precision = 4, correct_extreme = TRUE, seed = NULL, special_default = FALSE)`
+  - Convenience helper to generate randomized measurements for each row in a
+    supplied `df` (a dataframe returned by `load_random_dates()`), or when
+    `df` is omitted the function will load the default `data-files/random_dates.csv`.
+  - Special default behaviour: when called with no explicit `methods`,
+    `sexes` or `requested_z`, the function will attempt to allocate up to 800
+    measurements (200 per method) while respecting age-restrictions:
+    - `headc` only for age < 61 months
+    - `weight` only for age <= 120 months
+    The allocation balances sexes per-method and generates per-row
+    `requested_z` values: roughly half near-zero in [-2.999, 2.999] and half
+    extreme values split between (-8, -3) and (3, 8), rounded to 3 dp. Use
+    `special_default = TRUE` to force this behaviour programmatically.
+
+- `test_generated_measurements(input, save_csv = FALSE, csv_path = NULL, tol = 1e-3, verbose = TRUE)`
+  - Validates a dataframe (or CSV path) produced by
+    `compute_random_measurements()` using `anthro`/`anthroplus` z-score
+    functions. Writes `created-csvs/validation_results.csv` on success or
+    `created-csvs/validation_mismatches.csv` when mismatches are found and
+    logs a success message or a warning respectively.
+
 ## Example
 
 Run this example in an R session (after installing the modified packages or
